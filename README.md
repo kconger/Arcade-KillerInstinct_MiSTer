@@ -12,10 +12,11 @@ implements:
 - Midway DCS Audio with an ADSP-2105-compatible HDL engine and all eight sound
   ROM banks.
 - Original 320 x 240 video, framebuffer page flipping and BGR555 output.
-- Native/60 Hz CRT timing modes.
 - ATA PIO access to raw disk images through MiSTer's mounted-image interface.
 - Controls, coins, Start, Service, Test and MAME-compatible keyboard mappings.
 - Game DIP switches.
+- Native/60 Hz CRT timing modes.
+- Original/Full Screen aspect ratios
 
 ### Known issue
 
@@ -39,6 +40,7 @@ chdman extracthd -i kinst2.chd -o kinst2.img
 
 Place the resulting image files in their respective folders ```games/kinst/``` or ```games/kinst2/```.
 
+On first launch the HDD image must be selected, this is not necessary for later launches.
 
 ## Credits
 Core by Keith Conger

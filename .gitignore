@@ -28,6 +28,7 @@ vsim.wlf
 # Quartus build state and artifacts
 output_files/
 db/
+dse/
 incremental_db/
 greybox_tmp/
 *.qws
@@ -37,7 +38,6 @@ greybox_tmp/
 *.pin
 *.jdi
 *.sof
-*.rbf
 *.done
 *.qdf
 *.bak

@@ -32,8 +32,14 @@ entity cpu_instrcache is
       ddr3_DOUT_READY   : in  std_logic;
       
       read_select       : in  std_logic;
-      read_addr1        : in  unsigned(31 downto 0);
-      read_addr2        : in  unsigned(31 downto 0);
+      -- RAM index for the tag and data lookups: bits 13 downto 2 of the fetch
+      -- address, but produced by ONE flattened mux in cpu.vhd rather than by
+      -- the forwarding mux feeding the fetch mux feeding here. See FetchIndex1
+      -- there for why the shorter path matters. The tag COMPARE still uses
+      -- read_addrCompare1/2, so a wrong index can only miss and refill - it
+      -- cannot return wrong data.
+      read_index1       : in  unsigned(13 downto 2);
+      read_index2       : in  unsigned(13 downto 2);
       read_addrCompare1 : in  unsigned(31 downto 0);
       read_addrCompare2 : in  unsigned(31 downto 0);
       read_hit          : out std_logic;
@@ -117,7 +123,7 @@ begin
       q          => tag_q_b1
    );
    
-   tag_address_b1 <= std_logic_vector(read_addr1(13 downto 5));
+   tag_address_b1 <= std_logic_vector(read_index1(13 downto 5));
    read_hit1      <= '1' when (unsigned(tag_q_b1(17 downto 0)) = read_addrCompare1(31 downto 14) and tag_q_b1(18) = '1') else '0';
    
    itagram2 : entity mem.RamMLAB
@@ -136,7 +142,7 @@ begin
       q          => tag_q_b2
    );
    
-   tag_address_b2 <= std_logic_vector(read_addr2(13 downto 5));
+   tag_address_b2 <= std_logic_vector(read_index2(13 downto 5));
    read_hit2      <= '1' when (unsigned(tag_q_b2(17 downto 0)) = read_addrCompare2(31 downto 14) and tag_q_b2(18) = '1') else '0';
 
    --------- data
@@ -201,8 +207,8 @@ begin
    );
    
    cache_address_b <= std_logic_vector(fill_addrTag_sav(13 downto 2))  when (state /= IDLE) else
-                      std_logic_vector(read_addr2(13 downto 2)) when (read_select = '1') else
-                      std_logic_vector(read_addr1(13 downto 2));
+                      std_logic_vector(read_index2(13 downto 2)) when (read_select = '1') else
+                      std_logic_vector(read_index1(13 downto 2));
    
    read_data       <= cache_q_b when LITTLE_ENDIAN else byteswap32(cache_q_b);
    

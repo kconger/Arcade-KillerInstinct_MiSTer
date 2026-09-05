@@ -599,6 +599,26 @@ architecture arch of cpu is
    signal FetchAddr                    : unsigned(63 downto 0) := (others => '0'); 
    signal FetchAddr1                   : unsigned(63 downto 0) := (others => '0'); 
    signal FetchAddr2                   : unsigned(63 downto 0) := (others => '0'); 
+   -- FetchAddr1(13 downto 2) and FetchAddr2(13 downto 2), produced by ONE
+   -- flattened mux instead of the two the fetch address goes through.
+   --
+   -- The I-cache tag RAM is an asynchronous-read MLAB, so its index is
+   -- combinational from the fetch address in the same cycle the address is
+   -- chosen. The binding path in the CPU domain at 100 MHz is
+   --   resultWriteEnable -> value1 (3-way forward mux) -> FetchAddr1 (5-way
+   --   fetch mux) -> itagram1 -> rd_mux -> read_hit -> stall1
+   -- at 10.99 ns, 61% of it interconnect. Two of those hops exist only because
+   -- the forwarding mux and the fetch mux are separate signals that have to be
+   -- routed between: 1.56 ns from value1 to FetchAddr1, then 1.22 ns on to the
+   -- RAM.
+   --
+   -- Only bits 13 downto 2 reach the RAMs - 9 for the tag index, 12 for the
+   -- data address - so a private flattened copy of just those costs 12 bits of
+   -- mux and removes an entire level plus one long hop. The tag COMPARE still
+   -- uses FetchAddrTLBMuxed1, so a wrong index cannot be mistaken for a hit;
+   -- it would miss and fill, not return the wrong line.
+   signal FetchIndex1                  : unsigned(13 downto 2) := (others => '0');
+   signal FetchIndex2                  : unsigned(13 downto 2) := (others => '0');
    signal FetchAddrTLBMuxed1           : unsigned(31 downto 0) := (others => '0'); 
    signal FetchAddrTLBMuxed2           : unsigned(31 downto 0) := (others => '0'); 
    signal FetchAddrSelect              : std_logic;
@@ -2208,8 +2228,8 @@ begin
       ddr3_DOUT_READY   => ddr3_DOUT_READY,
       
       read_select       => FetchAddrSelect,
-      read_addr1        => FetchAddr1(31 downto 0),
-      read_addr2        => FetchAddr2(31 downto 0),
+      read_index1       => FetchIndex1,
+      read_index2       => FetchIndex2,
       read_addrCompare1 => FetchAddrTLBMuxed1,
       read_addrCompare2 => FetchAddrTLBMuxed2,
       read_hit          => instrcache_hit,
@@ -3379,6 +3399,39 @@ begin
                  PCnext;
 
    FetchAddr2 <= PCnextBranch;
+
+   -- Same arms, same priority, as FetchAddr1 above, with value1's forwarding
+   -- mux folded in so the RAM index is one mux from its sources. The jump
+   -- immediate arm reduces to decodeJumpTarget(11 downto 0): FetchAddr1(1
+   -- downto 0) is "00" and (27 downto 2) is decodeJumpTarget, so (13 downto 2)
+   -- is exactly its low twelve bits. Keep this in step with FetchAddr1 - they
+   -- must agree bit for bit.
+   FetchIndex1 <= exceptionPC(13 downto 2)      when (exception = '1' or exceptionStage1 = '1') else
+                  PCnext(13 downto 2)           when (executeIgnoreNext = '1' or decodeNew = '0') else
+                  resultData(13 downto 2)       when (decodeBranchType = BRANCH_ALWAYS_REG and
+                                                      executeForwardValue1 = '1' and resultWriteEnable = '1') else
+                  writebackData(13 downto 2)    when (decodeBranchType = BRANCH_ALWAYS_REG and
+                                                      writebackForwardValue1 = '1') else
+                  decodeValue1(13 downto 2)     when (decodeBranchType = BRANCH_ALWAYS_REG) else
+                  decodeJumpTarget(11 downto 0) when (decodeBranchType = BRANCH_JUMPIMM) else
+                  eretPC(13 downto 2)           when (decodeBranchType = BRANCH_ERET) else
+                  PCnext(13 downto 2);
+
+   FetchIndex2 <= PCnextBranch(13 downto 2);
+
+-- synthesis translate_off
+   -- The two must never disagree; a mismatch would index a different cache line
+   -- than the tag compare is checking.
+   process (clk93)
+   begin
+      if (rising_edge(clk93)) then
+         assert FetchIndex1 = FetchAddr1(13 downto 2)
+            report "FetchIndex1 drifted from FetchAddr1(13 downto 2)" severity failure;
+         assert FetchIndex2 = FetchAddr2(13 downto 2)
+            report "FetchIndex2 drifted from FetchAddr2(13 downto 2)" severity failure;
+      end if;
+   end process;
+-- synthesis translate_on
 
    -- WHICH ARM OF THE MUX ABOVE PRODUCED THIS FETCH ADDRESS.
    --
