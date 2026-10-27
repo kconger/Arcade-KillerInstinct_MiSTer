@@ -16,7 +16,7 @@ implements:
 - Controls, coins, Start, Service, Test and MAME-compatible keyboard mappings.
 - Game DIP switches.
 - Native/60 Hz CRT timing modes.
-- Original/Full Screen aspect ratios
+- Original/Wide Screen aspect ratios
 - Core Pause
 
 ## Media
@@ -44,7 +44,7 @@ Core by Keith Conger
 
 R4300i CPU adapted from the [N64](https://github.com/MiSTer-devel/N64_MiSTer) MiSTer core
 
-`adsp2105.sv` and `dcs_mem.sv` are adapted from the [Wolf Unit](https://github.com/blahm1d/wolf-unit) MiSTer core
+`adsp2105.sv` and `dcs_mem.sv` adapted from the [Wolf Unit](https://github.com/blahm1d/wolf-unit) MiSTer core
 
 [MAME](https://github.com/mamedev/mame) kinst driver as a reference
 
