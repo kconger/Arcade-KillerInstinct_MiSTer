@@ -3,7 +3,10 @@
 MiSTer FPGA implementation of the Midway Killer Instinct arcade hardware used
 by Killer Instinct (1994) and Killer Instinct 2 (1996).
 
-## Current status
+## Hardware Requirements
+SDRAM of any size is required.
+
+## Features
 
 Both KI1 and KI2 boot and are fully playable on MiSTer. The core
 implements:
@@ -17,6 +20,7 @@ implements:
 - Game DIP switches.
 - Native/60 Hz CRT timing modes.
 - Original/Wide Screen aspect ratios
+- Optional vertical crop
 - Core Pause
 
 ## Media

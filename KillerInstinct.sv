@@ -127,6 +127,7 @@ localparam CONF_STR = {
 	"P1,Video Settings;",
 	"P1O1,Aspect Ratio,Original,Wide Screen;",
 	"P1O2,Video Timing,Native,60Hz CRT;",
+	"P1OD,Crop,Off,On;",
 	"-;",
 	"O8,OSD Pause,Off,On;",
 	"-;",
@@ -364,6 +365,7 @@ wire [9:0] video_max_v_count;
 wire crt_60hz = status[2];
 
 wire        native_ce_pixel;
+wire        native_advance;
 wire [9:0]  native_h_count;
 wire [9:0]  native_v_count;
 wire        native_de;
@@ -375,14 +377,19 @@ wire [31:0] native_vblank_count;
 wire        native_vblank_seen;
 wire [9:0]  native_max_v_count;
 
-// Keep the original generator running in both modes. Its CE_PIXEL is only
-// the 1-in-8 pixel strobe, so it is safe to use as the common 6.25 MHz pixel
-// enable for the alternate counters below.
+// Keep the original generator running in both modes. Its CE_PIXEL is the
+// common 6.25 MHz pixel strobe. The alternate counters below step on its
+// advance output instead - the clock before CE_PIXEL, whose edge steps the
+// generator's own counters - so h_count and v_count change on the same edge in
+// either mode. ki_framebuffer issues the next column's line-buffer read in
+// that clock, so counters stepping on CE_PIXEL, a clock later, would show
+// pixel N+1 in column N.
 ki_video_timing #(.CLOCK_DIVIDE(8)) video_timing
 (
 	.clk(clk_core),
 	.reset(core_reset),
 	.ce_pixel(native_ce_pixel),
+	.advance(native_advance),
 	.h_count(native_h_count),
 	.v_count(native_v_count),
 	.display_enable(native_de),
@@ -423,7 +430,7 @@ always @(posedge clk_core) begin
 		crt_vblank_count <= 32'd0;
 		crt_vblank_seen <= 1'b0;
 	end
-	else if(native_ce_pixel) begin
+	else if(native_advance) begin
 		if(crt_h_count == CRT_H_TOTAL-1) begin
 			crt_h_count <= 10'd0;
 
@@ -455,10 +462,17 @@ wire crt_vs = ~((crt_v_count >= CRT_V_ACTIVE + CRT_V_FP) &&
                 (crt_v_count <  CRT_V_ACTIVE + CRT_V_FP + CRT_V_SYNC));
 wire crt_vblank = (crt_v_count >= CRT_V_ACTIVE);
 
+// Crop blanks the first and last 8 columns of the 320-pixel line, leaving
+// 304 x 240 active in either timing mode. Only DE changes: sync, the
+// framebuffer fetch and the vblank IRQ still run on the full line, so game
+// timing is identical with it on or off. VIDEO_ARX/ARY follow it below.
+wire crop = status[13];
+wire crop_de = !crop || ((h_count >= 10'd8) && (h_count < 10'd312));
+
 assign CE_PIXEL = native_ce_pixel;
 assign h_count = crt_60hz ? crt_h_count : native_h_count;
 assign v_count = crt_60hz ? crt_v_count : native_v_count;
-assign VGA_DE = crt_60hz ? crt_de : native_de;
+assign VGA_DE = (crt_60hz ? crt_de : native_de) && crop_de;
 assign VGA_HS = crt_60hz ? crt_hs : native_hs;
 assign VGA_VS = crt_60hz ? crt_vs : native_vs;
 assign vblank = crt_60hz ? crt_vblank : native_vblank;
@@ -1393,6 +1407,7 @@ ki_framebuffer framebuffer
 	.clk(clk_core),
 	.reset(core_reset),
 	.ce_pixel(CE_PIXEL),
+	.advance(native_advance),
 	.h_count(h_count),
 	.v_count(v_count),
 	.framebuffer_base(framebuffer_base),
@@ -1622,8 +1637,11 @@ assign CLK_VIDEO = clk_core;
 assign VGA_R = red;
 assign VGA_G = green;
 assign VGA_B = blue;
-assign VIDEO_ARX = status[1] ? 13'd16 : 13'd4;
-assign VIDEO_ARY = status[1] ? 13'd9 : 13'd3;
+// Original is square pixels, so the cropped 304 x 240 picture is 19:15 rather
+// than 4:3; the dropped columns are removed, not stretched over. Wide Screen
+// fills 16:9 with whatever is active either way.
+assign VIDEO_ARX = status[1] ? 13'd16 : (crop ? 13'd19 : 13'd4);
+assign VIDEO_ARY = status[1] ? 13'd9 : (crop ? 13'd15 : 13'd3);
 assign VGA_F1 = 1'b0;
 assign VGA_SL = 2'b00;
 assign VGA_SCALER = 1'b0;
